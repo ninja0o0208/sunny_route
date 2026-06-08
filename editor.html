@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>🗺️ 掃街路線編輯器｜陳怡君</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
+  <script src="zhonghe.js"></script>
+  
+  <style>
+    body { background-color: #f8f9fa; font-family: "Microsoft JhengHei", sans-serif; margin: 0; padding: 0; display: flex; height: 100vh; overflow: hidden; }
+    #editor-sidebar { width: 370px; background: white; box-shadow: 2px 0 10px rgba(0,0,0,0.1); display: flex; flex-direction: column; z-index: 10000; position: relative; }
+    .header-box { padding: 15px; text-align: center; background: #1d3557; color: white; border-bottom: 4px solid #4BC5B4; }
+    .main-title { font-size: 1.2rem; font-weight: 800; letter-spacing: 1px; }
+    .nav-tabs { background: #f1f3f5; padding-top: 10px; border-bottom: 2px solid #ddd; }
+    .nav-tabs .nav-link { color: #666; font-weight: bold; border: none; border-radius: 0; }
+    .nav-tabs .nav-link.active { color: #1d3557; background: white; border-bottom: 3px solid #4BC5B4; }
+    .control-panel { padding: 15px; flex: 1; overflow-y: auto; }
+    .control-panel::-webkit-scrollbar { width: 6px; }
+    .control-panel::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+    
+    .route-type-btn { width: 100%; text-align: left; font-weight: bold; border-radius: 8px; border: 2px solid transparent; padding: 8px 10px; transition: 0.2s; background: #f8f9fa; cursor: pointer; font-size: 0.95rem; margin-bottom: 0;}
+    .route-type-btn.active { box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+    .route-type-btn.hidden-layer { opacity: 0.4; filter: grayscale(100%); text-decoration: line-through; }
+    
+    .type-a.active { border-color: #3a86ff; background: #e0edff; color: #3a86ff; }
+    .type-b.active { border-color: #38b000; background: #e6f7df; color: #38b000; }
+    .type-c.active { border-color: #e63946; background: #fdeaea; color: #e63946; }
+    .type-d.active { border-color: #9d4edd; background: #f3e8fc; color: #9d4edd; }
+    
+    #map-container { flex: 1; height: 100%; position: relative; }
+    .small-circle-node { background: white; border: 2.5px solid #1d3557; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.3); cursor: grab; }
+    .small-circle-node:active { cursor: grabbing; }
+    .custom-pin-icon { background: white; border: 2px solid #1d3557; border-radius: 50%; width: 32px !important; height: 32px !important; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; box-shadow: 0 3px 6px rgba(0,0,0,0.3); cursor: grab;}
+    .custom-pin-icon:active { cursor: grabbing; }
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 20000; display: flex; justify-content: center; align-items: center; }
+    .node-editor-card { background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 360px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+    .icon-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 15px; margin-top: 5px;}
+    .icon-option { font-size: 1.4rem; padding: 5px; cursor: pointer; border-radius: 8px; border: 2px solid transparent; text-align: center; transition: 0.2s; line-height: 1.2;}
+    .icon-option:hover { background: #f1f3f5; }
+    .icon-option.selected { border-color: #4BC5B4; background: #e6fdf9; transform: scale(1.05);}
+    .icon-label { font-size: 0.6rem; color: #666; display: block; margin-top: 2px; font-weight: bold;}
+    .generated-name-box { background: #e9ecef; padding: 10px; border-radius: 8px; font-weight: bold; color: #495057; font-size: 0.9rem; text-align: center; border: 1px dashed #ced4da;}
+    .route-list-item { background: white; border: 1px solid #ddd; border-left: 4px solid #1d3557; border-radius: 6px; padding: 10px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 5px;}
+    .route-list-item .title { font-weight: bold; font-size: 0.95rem; color: #1d3557;}
+    .route-list-item .meta { font-size: 0.75rem; color: #666;}
+    .route-list-item .actions { display: flex; gap: 5px; margin-top: 5px;}
+    .leaflet-control-layers-expanded { margin-bottom: 5px !important; }
+    .leaflet-bottom.leaflet-right { display: flex; flex-direction: column-reverse; align-items: flex-end; }
+  </style>
+</head>
+<body>
+  <div id="app" style="display: flex; width: 100%; height: 100%;">
+    <div id="editor-sidebar">
+      <div class="header-box">
+        <div class="main-title">🗺️ 情報路線編輯器</div>
+        <div style="font-size: 0.8rem; margin-top: 5px;" v-if="editMode">✏️ 正在編輯模式：長按節點可拖曳</div>
+        <div style="font-size: 0.8rem; margin-top: 5px;" v-else>📍 長按大頭釘可拖曳微調位置</div>
+      </div>
+      <ul class="nav nav-tabs justify-content-center">
+        <li class="nav-item"><a class="nav-link" :class="{active: activeTab==='edit'}" @click="activeTab='edit'" href="#">🗺️ 編輯器</a></li>
+        <li class="nav-item"><a class="nav-link" :class="{active: activeTab==='list'}" @click="activeTab='list'" href="#">📂 歷史路線</a></li>
+      </ul>
+      <div class="control-panel" v-show="activeTab==='edit'">
+        <div v-if="editMode" class="alert alert-warning p-2 text-center mb-3" style="font-size:0.85rem; font-weight:bold;">⚠️ 正在修改：{{ generatedRouteName }}</div>
+        <h6 style="color: #4BC5B4; font-weight: bold; margin-bottom: 10px;">1. 路線紀錄資訊 (母集合)</h6>
+        <div class="row g-2 mb-2">
+          <div class="col-12"><label class="form-label mb-1" style="font-size: 0.8rem; font-weight: bold;">📅 日期</label><input type="date" class="form-control form-control-sm" v-model="routeData.date"></div>
+          <div class="col-6"><label class="form-label mb-1" style="font-size: 0.8rem; font-weight: bold;">開始時間</label><input type="time" class="form-control form-control-sm" v-model="routeData.startTime"></div>
+          <div class="col-6"><label class="form-label mb-1" style="font-size: 0.8rem; font-weight: bold;">結束時間</label><input type="time" class="form-control form-control-sm" v-model="routeData.endTime"></div>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-5">
+            <label class="form-label mb-1" style="font-size: 0.8rem; font-weight: bold;">🗺️ 所屬分區</label>
+            <select class="form-select form-select-sm" v-model="routeData.zone">
+              <option value="漳和分區">漳和分區</option><option value="員山分區">員山分區</option>
+              <option value="南勢分區">南勢分區</option><option value="秀安分區">秀安分區</option>
+            </select>
+          </div>
+          <div class="col-7">
+            <label class="form-label mb-1" style="font-size: 0.8rem; font-weight: bold;">📍 路段 (如:員山路)</label>
+            <input type="text" class="form-control form-control-sm" v-model="routeData.location" placeholder="主要路段">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label mb-1" style="font-size: 0.8rem; font-weight: bold; color: #1d3557;">💡 母集合活動命名：</label>
+          <div class="generated-name-box">{{ generatedRouteName || '請輸入日期與路段' }}</div>
+        </div>
+        <hr>
+        <h6 style="color: #4BC5B4; font-weight: bold;">2. 選擇路線屬性與填寫備註</h6>
+        <div style="font-size:0.75rem; color:#e63946; font-weight:bold; margin-bottom:8px;">💡 提示：按鈕「連點兩下」可隱藏/顯示該路線。</div>
+        
+        <div class="d-flex align-items-center mb-2 gap-2">
+          <button class="route-type-btn type-a flex-shrink-0" style="width: 130px;" :class="{ active: currentType === 'A', 'hidden-layer': hiddenTypes.includes('A') }" @click="setDrawingType('A')" @dblclick="toggleVisibility('A')">
+            🔵 A. 預排
+          </button>
+          <input type="text" class="form-control form-control-sm" v-model="typeNotes.A" placeholder="A路線備註...">
+        </div>
+        
+        <div class="d-flex align-items-center mb-2 gap-2">
+          <button class="route-type-btn type-b flex-shrink-0" style="width: 130px;" :class="{ active: currentType === 'B', 'hidden-layer': hiddenTypes.includes('B') }" @click="setDrawingType('B')" @dblclick="toggleVisibility('B')">
+            🟢 B. 實走
+          </button>
+          <input type="text" class="form-control form-control-sm" v-model="typeNotes.B" placeholder="B路線備註...">
+        </div>
+        
+        <div class="d-flex align-items-center mb-2 gap-2">
+          <button class="route-type-btn type-c flex-shrink-0" style="width: 130px;" :class="{ active: currentType === 'C', 'hidden-layer': hiddenTypes.includes('C') }" @click="setDrawingType('C')" @dblclick="toggleVisibility('C')">
+            🔴 C. 極佳
+          </button>
+          <input type="text" class="form-control form-control-sm" v-model="typeNotes.C" placeholder="C路線備註...">
+        </div>
+        
+        <div class="d-flex align-items-center mb-3 gap-2">
+          <button class="route-type-btn type-d flex-shrink-0" style="width: 130px;" :class="{ active: currentType === 'D', 'hidden-layer': hiddenTypes.includes('D') }" @click="setDrawingType('D')" @dblclick="toggleVisibility('D')">
+            🟣 D. 欲試
+          </button>
+          <input type="text" class="form-control form-control-sm" v-model="typeNotes.D" placeholder="D路線備註...">
+        </div>
+        
+        <hr>
+        <div v-if="!editMode">
+          <button class="btn w-100 mb-2" style="background:#dc3545; color:white; font-weight:bold;" @click="clearCurrentDraw" v-if="layerCount > 0">🗑️ 清空重畫</button>
+          <button class="btn w-100" style="background:#1d3557; color:white; font-weight:bold; padding: 12px;" @click="saveRoute" :disabled="layerCount === 0">💾 新增母集合與情報</button>
+        </div>
+        <div v-else>
+          <button class="btn w-100 mb-2" style="background:#ffb703; color:#1d3557; font-weight:bold;" @click="undoEdit">🔄 放棄修改並還原</button>
+          <button class="btn w-100" style="background:#2a9d8f; color:white; font-weight:bold; padding: 12px;" @click="saveRoute" :disabled="layerCount === 0">✅ 儲存修改</button>
+          <button class="btn btn-sm btn-outline-secondary w-100 mt-2" @click="exitEditMode">取消編輯 (回新增模式)</button>
+        </div>
+      </div>
+      <div class="control-panel" v-show="activeTab==='list'">
+        <button class="btn btn-sm btn-outline-primary w-100 mb-3" @click="fetchSavedRoutes">🔄 重新整理列表</button>
+        <div v-if="loadingList" class="text-center text-muted mt-3">載入中...</div>
+        <div v-else-if="savedRoutesList.length === 0" class="text-center text-muted mt-3">無資料</div>
+        <div class="route-list-item" v-for="r in savedRoutesList" :key="r.id" style="border-left-color: #1d3557;">
+          <div class="title">{{ r.name || '未命名活動' }}</div>
+          <div class="meta">路段數: {{ r.types ? r.types.length : 1 }} 種 | 分區: {{ r.zone || '未設定' }} | 釘選: {{ r.intelPoints?.length || 0 }}</div>
+          <div class="actions">
+            <button class="btn btn-sm btn-primary w-50" @click="startEdit(r)">✏️ 編輯</button>
+            <button class="btn btn-sm btn-outline-danger w-50" @click="deleteRoute(r.id, r.name)">🗑️ 刪除</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="map-container"></div>
+    <div class="modal-overlay" v-if="showNodeModal">
+      <div class="node-editor-card">
+        <h5 style="color: #1d3557; font-weight: bold; margin-bottom: 10px;">📍 設定節點情報</h5>
+        <div style="font-size: 0.75rem; color: #e63946; margin-bottom: 10px;">提示：設定完畢後，大頭釘依然可以在地圖上拖曳微調。</div>
+        <label style="font-size: 0.85rem; font-weight: bold; color: #666;">選擇標籤圖示：</label>
+        <div class="icon-grid">
+          <div v-for="pin in pinOptions" :key="pin.emoji" class="icon-option" :class="{ selected: editingNode.icon === pin.emoji }" @click="editingNode.icon = pin.emoji">
+            {{ pin.emoji }}<span class="icon-label">{{ pin.label }}</span>
+          </div>
+        </div>
+        <label style="font-size: 0.85rem; font-weight: bold; color: #666;">情報備註：</label>
+        <textarea class="form-control mb-3" rows="3" v-model="editingNode.note" placeholder="例如：轉角水果攤老闆熱情。"></textarea>
+        <div class="d-flex justify-content-between">
+          <button class="btn btn-outline-danger btn-sm" @click="deleteNode" v-if="editingNode.isExisting">刪除此節點</button>
+          <div v-else></div> 
+          <div>
+            <button class="btn btn-light me-2" @click="closeNodeEditor">取消</button>
+            <button class="btn" style="background: #4BC5B4; color: white; font-weight: bold;" @click="saveNodeInfo">確認設定</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
+  
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+
+    const firebaseConfig = { apiKey: "AIzaSyBoKDn254nV57nG2NthINQzVz338jiJl1I", authDomain: "sunny-campaign.firebaseapp.com", projectId: "sunny-campaign" };
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const { createApp, ref, computed, onMounted, shallowRef, markRaw } = Vue;
+
+    createApp({
+      setup() {
+        const map = shallowRef(null); 
+        const tempLayer = shallowRef(null); 
+        const nodeMarkers = shallowRef([]); 
+        const layerCount = ref(0); 
+        
+        const currentType = ref('A'); const activeTab = ref('edit');
+        const editMode = ref(false); const editingRouteId = ref(null); const originalRouteSnapshot = ref(null);
+        const savedRoutesList = ref([]); const loadingList = ref(false);
+        
+        // 🚀 新增：屬性備註儲存器與雙擊隱藏狀態追蹤
+        const typeNotes = ref({ A: '', B: '', C: '', D: '' });
+        const hiddenTypes = ref([]); 
+
+        const getTodayDate = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+        const getWeekNumber = (dateString) => {
+            if (!dateString) return 0;
+            const d = new Date(dateString); d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
+            var yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+            return Math.ceil((((d - yearStart) / 86400000) + 1)/7);
+        };
+
+        const routeData = ref({ date: getTodayDate(), startTime: '16:30', endTime: '19:00', location: '', zone: '員山分區' });
+        const generatedRouteName = computed(() => {
+          if (!routeData.value || !routeData.value.location) return '';
+          const d = (routeData.value.date || '').replace(/-/g, '/'); 
+          return `[${routeData.value.zone || '未指定分區'}] ${d} ${routeData.value.startTime || '16:30'}-${routeData.value.endTime || '19:00'} ${routeData.value.location}`;
+        });
+
+        const routeIntelData = ref([]); const showNodeModal = ref(false);
+        const editingNode = ref({ id: null, icon: '💖', note: '', leafletMarker: null, isExisting: false });
+        const pinOptions = ref([{ emoji: '💖', label: '友善' }, { emoji: '🌟', label: '熱點' }, { emoji: '⚠️', label: '危險' }, { emoji: '☕', label: '休息' }, { emoji: '🐶', label: '惡犬' }, { emoji: '🚻', label: '廁所' }, { emoji: '📸', label: '拍照' }, { emoji: '🗣️', label: '重要' }, { emoji: '🪧', label: '看版' }, { emoji: '❌', label: '阻礙' }]);
+        const typeColors = { 'A': '#3a86ff', 'B': '#38b000', 'C': '#e63946', 'D': '#9d4edd' };
+
+        // 🚀 執行切換圖層顯示/隱藏的共用邏輯
+        const applyVisibility = () => {
+          if (!tempLayer.value) return;
+          tempLayer.value.eachLayer((layer) => {
+             if (layer.feature && layer.feature.properties) {
+                 const fType = layer.feature.properties.type || 'A';
+                 const fColor = layer.feature.properties.color || typeColors[fType];
+                 if (hiddenTypes.value.includes(fType)) {
+                     // 隱藏：透明度設為 0，且禁止互動
+                     if (layer.setStyle) layer.setStyle({ opacity: 0, fillOpacity: 0, interactive: false });
+                 } else {
+                     // 顯示：恢復正常
+                     if (layer.setStyle) layer.setStyle({ opacity: 0.8, fillOpacity: 0.2, interactive: true, color: fColor });
+                 }
+             }
+          });
+        };
+
+        // 🚀 雙擊觸發隱藏/顯示
+        const toggleVisibility = (type) => {
+          if (hiddenTypes.value.includes(type)) {
+              hiddenTypes.value = hiddenTypes.value.filter(t => t !== type);
+          } else {
+              hiddenTypes.value.push(type);
+          }
+          applyVisibility();
+        };
+
+        const setDrawingType = (type) => {
+          currentType.value = type || 'A';
+          // 確保正在繪製的路線不會處於隱藏狀態
+          if (hiddenTypes.value.includes(currentType.value)) {
+              hiddenTypes.value = hiddenTypes.value.filter(t => t !== currentType.value);
+              applyVisibility();
+          }
+          if (map.value && map.value.pm) {
+            map.value.pm.setPathOptions({ color: typeColors[currentType.value], weight: 5, opacity: 0.8 });
+          }
+        };
+
+        const initMap = () => {
+          const voyager = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19 });
+          const googleStreets = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 20 });
+          const googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20 });
+          const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
+          const positron = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 });
+          const darkMatter = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 });
+
+          map.value = L.map('map-container', { preferCanvas: true, attributionControl: false, layers: [googleHybrid] }).setView([24.998, 121.502], 15);
+          
+          const baseMaps = {
+            "Google 衛星+地名 (預設)": googleHybrid,
+            "Google 街道圖": googleStreets,
+            "標準風格 (Voyager)": voyager,
+            "純衛星影像": satellite,
+            "高質感白金": positron,
+            "極客黑夜": darkMatter
+          };
+          
+          L.control.layers(baseMaps, null, { collapsed: true, position: 'bottomright' }).addTo(map.value);
+          tempLayer.value = markRaw(L.featureGroup().addTo(map.value));
+
+          if (window.zhongheGeoJson) {
+            L.geoJSON(window.zhongheGeoJson, { style: { fill: false, color: "#1d3557", weight: 1, opacity: 0.3 } }).addTo(map.value);
+          }
+
+          map.value.pm.setGlobalOptions({ allowRotation: false });
+          map.value.pm.addControls({ position: 'topleft', drawMarker: false, drawCircleMarker: false, drawPolyline: true, drawPolygon: false, drawCircle: false, drawRectangle: false, drawText: false, editMode: true, dragMode: false, cutPolygon: false, removalMode: true, rotateMode: false });
+          setDrawingType('A');
+
+          map.value.on('pm:create', (e) => {
+            const layer = e.layer;
+            let feature = layer.feature || { type: 'Feature', properties: {} };
+            feature.properties.type = currentType.value;
+            feature.properties.color = typeColors[currentType.value];
+            layer.feature = feature; 
+
+            tempLayer.value.addLayer(layer);
+            layerCount.value = tempLayer.value.getLayers().length;
+            generateNodes(layer);
+          });
+
+          map.value.on('pm:remove', (e) => {
+            if (tempLayer.value && typeof tempLayer.value.hasLayer === 'function' && tempLayer.value.hasLayer(e.layer)) {
+              tempLayer.value.removeLayer(e.layer);
+              layerCount.value = tempLayer.value.getLayers().length;
+            }
+          });
+        };
+
+        const generateNodes = (layer) => {
+          if (!layer || typeof layer.getLatLngs !== 'function') return;
+          let latlngs = layer.getLatLngs();
+          if (latlngs.length > 0 && Array.isArray(latlngs[0])) { latlngs = latlngs.flat(); }
+          latlngs.forEach((latlng) => {
+            if (!latlng) return;
+            let smallNodeIcon = L.divIcon({ className: 'small-circle-node', iconSize: [14, 14], iconAnchor: [7, 7] });
+            let nodeMarker = L.marker(latlng, { icon: smallNodeIcon, draggable: true }).addTo(map.value);
+            const uniqueId = 'node_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+            nodeMarker.on('click', () => {
+              editingNode.value = { id: uniqueId, icon: '💖', note: '', leafletMarker: markRaw(nodeMarker), isExisting: false };
+              showNodeModal.value = true;
+            });
+            nodeMarkers.value.push(markRaw(nodeMarker));
+          });
+        };
+
+        const createDraggablePin = (pt) => {
+            if (!pt || !map.value) return;
+            let customIcon = L.divIcon({ className: 'custom-pin', html: `<div class="custom-pin-icon">${pt.icon || '💖'}</div>`, iconSize: [32, 32], iconAnchor: [16, 16], popupAnchor: [0, -18] });
+            let newMarker = L.marker([pt.lat || 0, pt.lng || 0], { icon: customIcon, draggable: true }).addTo(map.value);
+            if (pt.note) newMarker.bindPopup(`<div style="font-weight:bold; color:#1d3557; font-size:1.1rem; border-bottom:1px solid #ccc; padding-bottom:4px; margin-bottom:5px;">${pt.icon || '💖'} 情報筆記</div><div style="font-size:0.9rem;">${pt.note}</div>`);
+            newMarker.on('click', () => { 
+                editingNode.value = { id: pt.id, icon: pt.icon || '💖', note: pt.note || '', leafletMarker: markRaw(newMarker), isExisting: true }; 
+                showNodeModal.value = true; 
+            });
+            newMarker.on('dragend', (e) => {
+              let newPos = e.target.getLatLng(); let targetIdx = routeIntelData.value.findIndex(item => item.id === pt.id);
+              if (targetIdx > -1) { routeIntelData.value[targetIdx].lat = newPos.lat; routeIntelData.value[targetIdx].lng = newPos.lng; }
+            });
+            nodeMarkers.value.push(markRaw(newMarker));
+        };
+
+        const closeNodeEditor = () => { showNodeModal.value = false; };
+
+        const saveNodeInfo = () => {
+          if (!editingNode.value || !editingNode.value.leafletMarker) return;
+          let { id, icon, note, leafletMarker, isExisting } = editingNode.value;
+          if (typeof leafletMarker.getLatLng !== 'function') return;
+          
+          let currentLatLng = leafletMarker.getLatLng(); map.value.removeLayer(leafletMarker);
+          let updatedObj = { id: id || ('node_' + Date.now()), lat: currentLatLng.lat || 0, lng: currentLatLng.lng || 0, icon: icon || '💖', note: note || '' };
+          if (isExisting) { let idx = routeIntelData.value.findIndex(item => item.id === id); if (idx > -1) routeIntelData.value[idx] = updatedObj; } 
+          else { routeIntelData.value.push(updatedObj); }
+          createDraggablePin(updatedObj); showNodeModal.value = false;
+        };
+
+        const deleteNode = () => {
+          if (!editingNode.value || !editingNode.value.leafletMarker) return;
+          let { id, leafletMarker } = editingNode.value; map.value.removeLayer(leafletMarker);
+          routeIntelData.value = routeIntelData.value.filter(item => item.id !== id); showNodeModal.value = false;
+        };
+
+        const clearCurrentDraw = () => {
+          if (tempLayer.value) { tempLayer.value.clearLayers(); map.value.removeLayer(tempLayer.value); }
+          if (nodeMarkers.value) { nodeMarkers.value.forEach(m => { if(m) map.value.removeLayer(m); }); }
+          tempLayer.value = markRaw(L.featureGroup().addTo(map.value)); 
+          nodeMarkers.value = []; routeIntelData.value = []; layerCount.value = 0;
+          typeNotes.value = { A: '', B: '', C: '', D: '' };
+          hiddenTypes.value = [];
+        };
+
+        const fetchSavedRoutes = async () => {
+          loadingList.value = true;
+          try {
+            const q = query(collection(db, "routes"), orderBy("date", "desc"), limit(40));
+            const snap = await getDocs(q);
+            savedRoutesList.value = snap.docs.map(doc => {
+              const data = doc.data() || {};
+              return { id: doc.id, ...data, intelPoints: data.intelPoints || [] };
+            });
+          } catch (e) { console.error(e); }
+          loadingList.value = false;
+        };
+
+        const startEdit = (route) => {
+          if (!route) return;
+          originalRouteSnapshot.value = JSON.parse(JSON.stringify(route));
+          executeLoadRoute(route); editMode.value = true; editingRouteId.value = route.id; activeTab.value = 'edit';
+        };
+
+        const undoEdit = () => { if (originalRouteSnapshot.value && confirm("確定要放棄目前的修改，還原回剛載入的狀態嗎？")) executeLoadRoute(originalRouteSnapshot.value); };
+
+        const exitEditMode = () => { clearCurrentDraw(); editMode.value = false; editingRouteId.value = null; originalRouteSnapshot.value = null; routeData.value = { date: getTodayDate(), startTime: '16:30', endTime: '19:00', location: '', zone: '員山分區' }; };
+
+        const executeLoadRoute = (route) => {
+          if (!route) return;
+          clearCurrentDraw();
+          routeData.value = { date: route.date || getTodayDate(), startTime: route.startTime || '16:30', endTime: route.endTime || '19:00', location: route.location || '', zone: route.zone || '員山分區' };
+          
+          // 🚀 載入時將備註填回輸入框
+          if (route.typeNotes) {
+            typeNotes.value = { A: route.typeNotes.A || '', B: route.typeNotes.B || '', C: route.typeNotes.C || '', D: route.typeNotes.D || '' };
+          }
+
+          if (tempLayer.value) map.value.removeLayer(tempLayer.value);
+          tempLayer.value = markRaw(L.featureGroup().addTo(map.value));
+
+          let parsedGeoData = null;
+          if (route.geoData) {
+            try { parsedGeoData = typeof route.geoData === 'string' ? JSON.parse(route.geoData) : route.geoData; } 
+            catch(e) { console.error("解析地圖資料失敗", e); }
+          }
+          
+          if (parsedGeoData) {
+            let geoLayer = L.geoJSON(parsedGeoData, {
+              style: function(feature) {
+                let fColor = (feature.properties && feature.properties.color) ? feature.properties.color : (route.color || typeColors['A']);
+                return { color: fColor, weight: 5, opacity: 0.8 };
+              }
+            });
+            geoLayer.eachLayer((layer) => {
+              tempLayer.value.addLayer(layer);
+              if (layer.pm) layer.pm.enable();
+            });
+          }
+
+          layerCount.value = tempLayer.value.getLayers().length;
+          routeIntelData.value = JSON.parse(JSON.stringify(route.intelPoints || []));
+          routeIntelData.value.forEach(pt => { if(pt) createDraggablePin(pt); });
+
+          if (tempLayer.value.getLayers().length > 0) {
+            try { map.value.fitBounds(tempLayer.value.getBounds(), { padding: [30,30] }); } catch(e) { console.error(e); }
+          }
+        };
+
+        const deleteRoute = async (id, name) => {
+          if (!id) return;
+          if (confirm(`⚠️ 確定要永久刪除路線 [${name || '未命名'}] 嗎？`)) {
+            await deleteDoc(doc(db, "routes", id)); fetchSavedRoutes();
+          }
+        };
+
+        const saveRoute = async () => {
+          if (!routeData.value || !routeData.value.location) { alert("請輸入掃街路段！"); return; }
+          if (!tempLayer.value || layerCount.value === 0) { alert("請在地圖上畫出路線！"); return; }
+          
+          let geoJsonFeatureCollection;
+          try { geoJsonFeatureCollection = tempLayer.value.toGeoJSON(); } 
+          catch(e) { alert("地圖路線解析失敗，請重新畫線。"); return; }
+
+          let usedTypes = new Set();
+          if (geoJsonFeatureCollection.features) {
+             geoJsonFeatureCollection.features.forEach(f => {
+               if (f.properties && f.properties.type) usedTypes.add(f.properties.type);
+             });
+          }
+          if (usedTypes.size === 0) usedTypes.add(currentType.value || 'A');
+
+          const dateStr = routeData.value.date || getTodayDate();
+          const yearMonthStr = (typeof dateStr === 'string' && dateStr.length >= 7) ? dateStr.substring(0, 7) : getTodayDate().substring(0, 7);
+          const weekNum = getWeekNumber(dateStr);
+          const zoneStr = routeData.value.zone || '員山分區';
+          const cleanIntelPoints = JSON.parse(JSON.stringify(routeIntelData.value || []));
+          const cleanTypeNotes = JSON.parse(JSON.stringify(typeNotes.value));
+
+          const payload = {
+            name: generatedRouteName.value || '未命名活動', 
+            date: dateStr, 
+            startTime: routeData.value.startTime || '16:30', 
+            endTime: routeData.value.endTime || '19:00', 
+            location: routeData.value.location || '', 
+            zone: zoneStr,
+            yearMonth: yearMonthStr, 
+            weekNumber: weekNum, 
+            types: Array.from(usedTypes),
+            typeNotes: cleanTypeNotes, // 🚀 寫入屬性備註
+            geoData: JSON.stringify(geoJsonFeatureCollection), 
+            intelPoints: cleanIntelPoints, 
+            isActive: true
+          };
+
+          const safePayload = JSON.parse(JSON.stringify(payload));
+
+          try {
+            if (editMode.value && editingRouteId.value) {
+              await updateDoc(doc(db, "routes", editingRouteId.value), safePayload);
+              alert(`✅ 路線 [${safePayload.name}] 更新成功！`); exitEditMode();
+            } else {
+              safePayload.createdAt = new Date().getTime();
+              await addDoc(collection(db, "routes"), safePayload);
+              alert(`✅ 路線 [${safePayload.name}] 新增成功！`); clearCurrentDraw(); routeData.value.location = '';
+            }
+            fetchSavedRoutes();
+          } catch (error) { 
+            console.error("Firebase Error:", error); 
+            alert(`儲存失敗！\n錯誤訊息：${error.message}`); 
+          }
+        };
+
+        onMounted(() => { initMap(); fetchSavedRoutes(); });
+
+        return { routeData, generatedRouteName, currentType, setDrawingType, saveRoute, tempLayer, clearCurrentDraw, showNodeModal, editingNode, closeNodeEditor, saveNodeInfo, pinOptions, deleteNode, activeTab, savedRoutesList, loadingList, fetchSavedRoutes, editMode, startEdit, exitEditMode, undoEdit, deleteRoute, layerCount, typeNotes, hiddenTypes, toggleVisibility };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>🗺️ 掃街掃街</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="zhonghe.js"></script>
+  
+  <style>
+    body { margin: 0; padding: 0; background-color: #f8f9fa; font-family: "Microsoft JhengHei", sans-serif; overflow: hidden; height: 100vh; width: 100vw; }
+    #map-container { width: 100%; height: 100%; position: relative; z-index: 1; }
+
+    .floating-header {
+      position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+      background: rgba(255, 255, 255, 0.95); border: 2px solid #4BC5B4;
+      padding: 8px 20px; border-radius: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+      z-index: 10001; display: flex; align-items: center; gap: 10px; font-weight: 800; color: #1d3557;
+    }
+
+    #village-sidebar {
+      position: absolute; left: 15px; top: 70px; width: 210px; max-width: 85%; max-height: 70vh; 
+      background: white; z-index: 10002; box-shadow: 0 4px 15px rgba(0,0,0,0.35);
+      border-radius: 8px; display: none; flex-direction: column; overflow: hidden;
+    }
+    .sidebar-header { background: #1d3557; color: white; padding: 8px 10px; font-weight: bold; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center; cursor: grab; }
+    .sidebar-header:active { cursor: grabbing; }
+    .sidebar-close-btn { background: none; border: none; color: white; font-size: 1.1rem; cursor: pointer; padding: 0 5px; }
+    .sidebar-content { flex: 1; overflow-y: auto; padding: 6px; background: #f8f9fa; }
+    .rank-item { border-radius: 6px; padding: 4px 6px; margin-bottom: 5px; display: flex; align-items: center; box-shadow: 0 1px 2px rgba(0,0,0,0.08); cursor: pointer; border: 1px solid #eee; border-left: 4px solid #4BC5B4; }
+    .rank-num { width: 20px; height: 20px; background: #ffb703; color: #1d3557; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 0.75rem; margin-right: 6px; }
+    .rank-info { flex: 1; line-height: 1.15; }
+    .rank-village { font-weight: bold; color: #1d3557; font-size: 0.85rem; }
+    .rank-chief { font-size: 0.7rem; color: #666; margin-left: 4px; }
+    .rank-votes { font-size: 0.75rem; color: #e63946; font-weight: bold; margin-top: 2px; }
+    .rank-rate { font-size: 0.7rem; color: #6c757d; }
+
+    .sidebar-toggle-btn { position: absolute; left: 15px; top: 15px; z-index: 10001; background: #1d3557; color: white; border: 2px solid white; padding: 6px 12px; border-radius: 8px; font-weight: bold; box-shadow: 0 2px 8px rgba(0,0,0,0.3); cursor: grab; display: flex; align-items: center; font-size: 0.9rem; }
+    
+    #filter-panel { position: absolute; right: 15px; top: 15px; width: 230px; background: rgba(255,255,255,0.95); z-index: 10002; box-shadow: 0 4px 15px rgba(0,0,0,0.3); border-radius: 8px; padding: 12px; border: 2px solid #4BC5B4; }
+    .filter-title { font-weight: bold; color: #1d3557; border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-bottom: 8px; font-size: 0.9rem; }
+    .filter-checkbox { margin-bottom: 5px; font-size: 0.85rem; font-weight: bold; display: flex; align-items: center; gap: 8px;}
+    .color-box { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #999; }
+    
+    .village-label { background: transparent; border: none; box-shadow: none; font-size: 0.75rem; font-weight: bold; color: #1d3557; text-shadow: 1px 1px 2px white; text-align: center; transition: all 0.2s; }
+    .map-zoomed-out .village-label { font-size: 0.5rem !important; opacity: 0.3 !important; }
+    .map-legend { background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); line-height: 1.5; font-size: 0.8rem; color: #333; cursor: pointer; transition: all 0.2s; overflow: hidden; }
+    .legend-item { display: flex; align-items: center; margin-bottom: 4px; }
+    .legend-color { width: 14px; height: 14px; margin-right: 8px; border: 1px solid #999; border-radius: 2px; }
+    .leaflet-control-layers-expanded { margin-bottom: 5px !important; }
+    .leaflet-bottom.leaflet-right { display: flex; flex-direction: column-reverse; align-items: flex-end; }
+    .viewer-pin-icon { background: white; border: 2px solid #1d3557; border-radius: 50%; width: 32px !important; height: 32px !important; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; box-shadow: 0 3px 6px rgba(0,0,0,0.3); }
+    #loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.9); z-index: 99999; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+  </style>
+</head>
+<body>
+
+  <div id="loading-overlay">
+    <div class="spinner-border" style="color:#4BC5B4; width: 3rem; height: 3rem;"></div>
+    <div class="mt-3 fw-bold" style="color:#1d3557;">載入圖資與最新路線...</div>
+  </div>
+
+  <div class="floating-header">🗺️ 掃街掃街</div>
+  <button id="btn-toggle-sidebar" class="sidebar-toggle-btn" onclick="toggleSidebar()">📊 各里排行</button>
+  
+  <div id="village-sidebar">
+    <div class="sidebar-header"><span>📊 支持度排行榜</span><button class="sidebar-close-btn" onclick="toggleSidebar()">✖</button></div>
+    <div class="sidebar-content" id="sidebar-village-list"></div>
+  </div>
+
+  <div id="filter-panel">
+    <div class="filter-title">⏳ 選擇時間區間或月份</div>
+    <select id="time-filter" class="form-select form-select-sm mb-2" onchange="document.getElementById('date-filter').value=''; renderRoutes()"></select>
+
+    <div class="filter-title mt-2">📅 篩選特定單日</div>
+    <select id="date-filter" class="form-select form-select-sm mb-2" onchange="if(this.value) document.getElementById('time-filter').value='custom'; else document.getElementById('time-filter').value='recent'; renderRoutes();"></select>
+
+    <div class="filter-title mt-3">👁️ 顯示路線圖層</div>
+    <label class="filter-checkbox"><input type="checkbox" checked value="A" onchange="renderRoutes()"><div class="color-box" style="background:#3a86ff"></div> A. 預排路線</label>
+    <label class="filter-checkbox"><input type="checkbox" checked value="B" onchange="renderRoutes()"><div class="color-box" style="background:#38b000"></div> B. 實際走過</label>
+    <label class="filter-checkbox"><input type="checkbox" checked value="C" onchange="renderRoutes()"><div class="color-box" style="background:#e63946"></div> C. 效果極佳</label>
+    <label class="filter-checkbox"><input type="checkbox" checked value="D" onchange="renderRoutes()"><div class="color-box" style="background:#9d4edd"></div> D. 欲嘗試路線</label>
+  </div>
+
+  <div id="map-container"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+  
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+    import { getFirestore, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+
+    const firebaseConfig = { apiKey: "AIzaSyBoKDn254nV57nG2NthINQzVz338jiJl1I", authDomain: "sunny-campaign.firebaseapp.com", projectId: "sunny-campaign" };
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    window.leafletMap = null; window.villageBoundsMap = {}; let chiefMap = {};      
+    let allRoutes = []; window.routeLayerGroup = null; 
+    window.zhongheGeoJson = (typeof window.zhongheData !== 'undefined') ? window.zhongheData : null;
+
+    const getTargetDateStr = (daysOffset) => {
+        const d = new Date(); d.setDate(d.getDate() + daysOffset);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    async function initViewer() {
+      try {
+        const chiefSnap = await getDocs(collection(db, "chiefs"));
+        chiefSnap.forEach(d => { if(d.exists()) chiefMap[d.data().village] = d.data(); });
+
+        const routesSnap = await getDocs(query(collection(db, "routes"), where("isActive", "==", true)));
+        routesSnap.forEach(d => { if(d.exists()) allRoutes.push(d.data()); });
+
+        const overlay = document.getElementById('loading-overlay');
+        if (overlay) overlay.style.display = 'none';
+        
+        initMapBase(); populateSidebarList(); buildDynamicFilters(); window.renderRoutes();
+        
+      } catch (e) { document.getElementById('loading-overlay').innerHTML = `<div class="text-danger fw-bold">連線失敗：${e.message}</div>`; }
+    }
+
+    function buildDynamicFilters() {
+      const monthSelect = document.getElementById('time-filter'); const dateSelect = document.getElementById('date-filter');
+      monthSelect.innerHTML = ''; dateSelect.innerHTML = '<option value="">-- 不指定日期 --</option>';
+
+      let monthsSet = new Set(); let datesSet = new Set();
+
+      allRoutes.forEach(r => {
+        if (!r) return;
+        let ym = r.yearMonth || (typeof r.date === 'string' && r.date.length >= 7 ? r.date.substring(0, 7) : null) || "未分類月份";
+        monthsSet.add(ym); r.yearMonth = ym;
+        if (r.date) { datesSet.add(r.date); }
+      });
+
+      let sortedMonths = Array.from(monthsSet).sort().reverse(); let sortedDates = Array.from(datesSet).sort().reverse(); 
+
+      let optRecent = document.createElement('option'); optRecent.value = 'recent'; optRecent.textContent = '過去3週～未來1週 (預設)';
+      monthSelect.appendChild(optRecent);
+
+      sortedMonths.forEach(ym => {
+         let opt = document.createElement('option'); opt.value = ym;
+         opt.textContent = ym.includes('-') ? `${ym.split('-')[0]}年${ym.split('-')[1]}月 路線資料` : `${ym} 路線資料`;
+         monthSelect.appendChild(opt);
+      });
+
+      let optAll = document.createElement('option'); optAll.value = 'all'; optAll.textContent = '載入所有歷史資料 (不分月)'; monthSelect.appendChild(optAll);
+      let optCustom = document.createElement('option'); optCustom.value = 'custom'; optCustom.textContent = '📌 已指定特定單日'; optCustom.style.display = 'none'; monthSelect.appendChild(optCustom);
+
+      sortedDates.forEach(d => {
+         let opt = document.createElement('option'); opt.value = d; opt.textContent = d;
+         dateSelect.appendChild(opt);
+      });
+    }
+
+    function initMapBase() {
+      const voyager = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19 });
+      const googleStreets = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 20 });
+      const googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20 });
+      
+      window.leafletMap = L.map('map-container', { preferCanvas: true, attributionControl: false, layers: [googleHybrid] }).setView([24.998, 121.502], 14); 
+      
+      const baseMaps = { "Google 衛星+地名 (預設)": googleHybrid, "Google 街道圖": googleStreets, "標準風格 (Voyager)": voyager };
+      L.control.layers(baseMaps, null, { collapsed: true, position: 'bottomright' }).addTo(window.leafletMap);
+      window.routeLayerGroup = L.layerGroup().addTo(window.leafletMap);
+
+      window.leafletMap.on('zoomend', function() {
+          const mapDiv = document.getElementById('map-container');
+          if (mapDiv) {
+            if (window.leafletMap.getZoom() < 14) mapDiv.classList.add('map-zoomed-out');
+            else mapDiv.classList.remove('map-zoomed-out');
+          }
+      });
+
+      if (window.zhongheGeoJson && window.zhongheGeoJson.features) {
+        let geoJsonForTurf = JSON.parse(JSON.stringify(window.zhongheGeoJson));
+        geoJsonForTurf.features.forEach(f => { if(f.properties) f.properties.zone = (chiefMap[f.properties.VILLNAME] || {}).zone || "未分類"; });
+        L.geoJSON(geoJsonForTurf, {
+          style: function(f) {
+            const c = chiefMap[f.properties.VILLNAME] || {};
+            let fillColor = c.support_level === 'high' ? "#ffc2c2" : (c.support_level === 'medium' ? "#ffecb3" : (c.support_level === 'low' ? "#cce5ff" : "#ffffff")); 
+            return { fillColor: fillColor, fillOpacity: 0.65, color: "#ffffff", weight: 1.5, opacity: 1 };
+          },
+          onEachFeature: function(f, layer) {
+            const vName = f.properties.VILLNAME; const c = chiefMap[vName] || { name: "未知", votes_valid: 0 };
+            layer.bindTooltip(`<div style="line-height:1.2;"><span style="color:#ffffff; font-size:0.75rem; font-weight:bold; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">${c.votes_valid || 0}</span><br>${vName}</div>`, { permanent: true, direction: "center", className: "village-label", pane: 'shadowPane' });
+            window.villageBoundsMap[vName] = layer.getBounds();
+          }
+        }).addTo(window.leafletMap);
+      }
+    }
+
+    window.renderRoutes = function() {
+      if (!window.routeLayerGroup) return;
+      window.routeLayerGroup.clearLayers();
+
+      const selectedMonth = document.getElementById('time-filter').value;
+      const selectedDate = document.getElementById('date-filter').value;
+      const checkedTypes = Array.from(document.querySelectorAll('#filter-panel input[type="checkbox"]:checked')).map(cb => cb.value);
+
+      const pastLimit = getTargetDateStr(-21); const futureLimit = getTargetDateStr(7);
+
+      allRoutes.forEach(route => {
+        if (!route) return;
+        const routeDate = route.date || '';
+        const routeYearMonth = route.yearMonth || (routeDate.length >= 7 ? routeDate.substring(0, 7) : '未分類月份');
+        const routeName = route.name || '未命名活動';
+        // 防呆取得路線備註
+        const typeNotes = route.typeNotes || {};
+
+        if (selectedDate) {
+            if (routeDate !== selectedDate) return;
+        } else {
+            if (selectedMonth === 'recent') {
+                if (!routeDate || routeDate < pastLimit || routeDate > futureLimit) return;
+            } else if (selectedMonth !== 'all' && selectedMonth !== 'custom') {
+                if (routeYearMonth !== selectedMonth) return;
+            }
+        }
+
+        if (route.geoData) {
+          let parsedGeoData = null;
+          try { parsedGeoData = typeof route.geoData === 'string' ? JSON.parse(route.geoData) : route.geoData; } 
+          catch(e) { console.error(e); }
+          
+          if (parsedGeoData && parsedGeoData.features) {
+            let hasVisibleLine = false; 
+            
+            L.geoJSON(parsedGeoData, {
+              filter: function(f) {
+                let fType = (f.properties && f.properties.type) ? f.properties.type : (route.type || 'A');
+                let isVisible = checkedTypes.includes(fType);
+                if (isVisible) hasVisibleLine = true;
+                return isVisible;
+              },
+              style: function(f) {
+                let fColor = (f.properties && f.properties.color) ? f.properties.color : (route.color || '#3a86ff');
+                return { color: fColor, weight: 6, opacity: 0.85 };
+              }
+            }).bindPopup(function (layer) {
+                let fType = (layer.feature && layer.feature.properties && layer.feature.properties.type) ? layer.feature.properties.type : (route.type || 'A');
+                let fColor = (layer.feature && layer.feature.properties && layer.feature.properties.color) ? layer.feature.properties.color : (route.color || '#3a86ff');
+                let specificNote = typeNotes[fType] || '無備註';
+                
+                // 🚀 核心升級：Popup 加入專屬備註顯示區塊
+                return `<div style="font-weight:bold; color:${fColor}; font-size:1.15rem; margin-bottom:4px;">${routeName}</div>
+                        <div style="font-size:0.85rem; color:#666; font-weight: bold;">📅 ${routeDate} | ⏰ ${route.startTime || '未指定'}</div>
+                        <div style="margin-top:8px; font-size:0.9rem; background:#f8f9fa; padding:8px; border-radius:6px; border-left: 4px solid ${fColor}; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <span style="font-weight:bold; color:#1d3557;">📝 屬性備註 (${fType})：</span><br>
+                            ${specificNote}
+                        </div>`;
+            }).addTo(window.routeLayerGroup);
+
+            if (hasVisibleLine && route.intelPoints) {
+              route.intelPoints.forEach(pt => {
+                if (!pt) return;
+                let intelIcon = L.divIcon({ className: 'custom-pin', html: `<div class="viewer-pin-icon">${pt.icon || '💖'}</div>`, iconSize: [32, 32], iconAnchor: [16, 16], popupAnchor: [0, -16] });
+                L.marker([pt.lat || 0, pt.lng || 0], { icon: intelIcon })
+                 .bindPopup(`<div style="font-weight:bold; color:#1d3557; font-size:1.1rem; border-bottom:2px solid #4BC5B4; padding-bottom:4px; margin-bottom:6px;">${pt.icon || '💖'} 現場情報</div><div style="font-size:0.95rem; font-weight: bold;">${pt.note || '無備註'}</div>`)
+                 .addTo(window.routeLayerGroup);
+              });
+            }
+          }
+        }
+      });
+    };
+
+    window.toggleSidebar = () => { const s = document.getElementById('village-sidebar'); if (s) s.style.display = s.style.display === 'flex' ? 'none' : 'flex'; };
+    window.zoomToVillage = (vName) => { if (window.leafletMap && window.villageBoundsMap && window.villageBoundsMap[vName]) window.leafletMap.fitBounds(window.villageBoundsMap[vName], { padding: [20, 20], maxZoom: 16 }); };
+
+    function populateSidebarList() {
+      const listDiv = document.getElementById('sidebar-village-list'); if (!listDiv) return;
+      let vArray = Object.keys(chiefMap).map(vName => { let c = chiefMap[vName] || {}; return { name: vName, votes_party: parseInt(c.votes_party)||0, support_level: c.support_level||'none' }; });
+      vArray.sort((a, b) => b.votes_party - a.votes_party);
+      listDiv.innerHTML = vArray.map((v, i) => {
+         let bgStyle = v.support_level === 'high' ? "background: #ffe8e8;" : (v.support_level === 'medium' ? "background: #fffce0;" : (v.support_level === 'low' ? "background: #f0f8ff;" : "background: #ffffff;")); 
+         return `<div class="rank-item" style="${bgStyle}" onclick="zoomToVillage('${v.name}')"><div class="rank-num">${i + 1}</div><div class="rank-info"><div class="rank-village">${v.name}</div><div class="rank-votes">支持：${v.votes_party} 票</div></div></div>`;
+      }).join('');
+    }
+
+    initViewer();
+  </script>
+</body>
+</html>
